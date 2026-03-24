@@ -26,25 +26,39 @@ console.log("Environment:", {
 });
 
 if (!fs.existsSync(UPLOADS_DIR)) {
-  fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+  try {
+    fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+  } catch (err) {
+    console.error("Failed to create uploads directory:", err);
+  }
 }
-
-const upload = multer({ dest: UPLOADS_DIR });
 
 async function createServer() {
   const app = express();
   const PORT = 3000;
+  
+  const upload = multer({ dest: UPLOADS_DIR });
 
   app.use(express.json({ limit: "50mb" }));
   app.use(express.urlencoded({ extended: true, limit: "50mb" }));
 
   // Health check
   app.get("/api/health", (req, res) => {
+    let sharpStatus = "unknown";
+    try {
+      sharpStatus = sharp ? "loaded" : "missing";
+    } catch (e) {
+      sharpStatus = "error: " + (e instanceof Error ? e.message : String(e));
+    }
+
     res.json({ 
       status: "ok", 
       time: new Date().toISOString(),
       env: process.env.NODE_ENV,
-      isNetlify: !!process.env.NETLIFY
+      isNetlify: !!process.env.NETLIFY,
+      sharp: sharpStatus,
+      uploadsDir: UPLOADS_DIR,
+      uploadsDirExists: fs.existsSync(UPLOADS_DIR)
     });
   });
 

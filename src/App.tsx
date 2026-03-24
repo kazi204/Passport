@@ -23,15 +23,18 @@ export default function App() {
   const [customHeight, setCustomHeight] = useState(50);
   const [copies, setCopies] = useState(4);
   const [apiStatus, setApiStatus] = useState<"checking" | "online" | "offline">("checking");
+  const [apiDetails, setApiDetails] = useState<any>(null);
 
   useEffect(() => {
     const verifyApi = async () => {
       try {
-        await checkHealth();
+        const data = await checkHealth();
         setApiStatus("online");
-      } catch (err) {
+        setApiDetails(data);
+      } catch (err: any) {
         console.error("API is offline or unreachable:", err);
         setApiStatus("offline");
+        setApiDetails({ error: err.message, status: err.response?.status });
       }
     };
     verifyApi();
@@ -149,9 +152,19 @@ export default function App() {
               }`} />
               <span className="text-xs font-medium text-slate-500 uppercase tracking-wider">
                 {apiStatus === "online" ? "System Online" : 
-                 apiStatus === "offline" ? "System Offline" : "Connecting..."}
+                 apiStatus === "offline" ? `System Offline (${apiDetails?.status || "Error"})` : "Connecting..."}
               </span>
             </div>
+            {apiStatus === "offline" && (
+              <div className="group relative">
+                <AlertCircle size={16} className="text-red-500 cursor-help" />
+                <div className="absolute top-full right-0 mt-2 w-64 p-3 bg-white border border-slate-200 rounded-xl shadow-xl opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-[60] text-xs text-slate-600">
+                  <p className="font-bold mb-1">Connection Error:</p>
+                  <p className="mb-2">{apiDetails?.error || "Unknown error"}</p>
+                  <p className="opacity-70 italic">Check Netlify logs for details.</p>
+                </div>
+              </div>
+            )}
             {originalImage && (
               <button 
                 onClick={reset}

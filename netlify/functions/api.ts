@@ -19,7 +19,7 @@ export const handler = async (event: any, context: any) => {
   }
   
   const handler = serverless(server, {
-    binary: ['image/*', 'application/pdf', 'multipart/form-data']
+    binary: ['*/*']
   });
   
   return handler(event, context);
