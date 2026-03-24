@@ -1,7 +1,7 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { UploadZone } from "./components/UploadZone";
 import { Editor } from "./components/Editor";
-import { uploadImage, removeBackground, generateLayout, generateSingle, downloadPdf, downloadPng } from "./services/api";
+import { uploadImage, removeBackground, generateLayout, generateSingle, downloadPdf, downloadPng, checkHealth } from "./services/api";
 import { Download, RefreshCw, CheckCircle2, AlertCircle, Printer, FileDown, Image } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 
@@ -22,6 +22,20 @@ export default function App() {
   const [customWidth, setCustomWidth] = useState(40);
   const [customHeight, setCustomHeight] = useState(50);
   const [copies, setCopies] = useState(4);
+  const [apiStatus, setApiStatus] = useState<"checking" | "online" | "offline">("checking");
+
+  useEffect(() => {
+    const verifyApi = async () => {
+      try {
+        await checkHealth();
+        setApiStatus("online");
+      } catch (err) {
+        console.error("API is offline or unreachable:", err);
+        setApiStatus("offline");
+      }
+    };
+    verifyApi();
+  }, []);
 
   const handleUpload = async (file: File) => {
     setIsUploading(true);
@@ -44,7 +58,9 @@ export default function App() {
       setNoBgFilename(bgData.filename);
     } catch (err: any) {
       console.error("Upload/Process error:", err);
-      setError("Failed to upload or process image. Please try again.");
+      const status = err.response?.status;
+      const detail = err.response?.data?.error || err.message;
+      setError(`Failed to process image (Status: ${status || "Unknown"}). Error: ${detail}`);
     } finally {
       setIsUploading(false);
       setIsRemovingBg(false);
@@ -125,15 +141,27 @@ export default function App() {
             </div>
             <h1 className="text-xl font-bold tracking-tight">Passport<span className="text-blue-600">Pro</span></h1>
           </div>
-          {originalImage && (
-            <button 
-              onClick={reset}
-              className="flex items-center gap-2 text-sm font-medium text-slate-500 hover:text-slate-800 transition-colors"
-            >
-              <RefreshCw size={16} />
-              Start Over
-            </button>
-          )}
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2">
+              <div className={`w-2 h-2 rounded-full ${
+                apiStatus === "online" ? "bg-green-500" : 
+                apiStatus === "offline" ? "bg-red-500" : "bg-yellow-500 animate-pulse"
+              }`} />
+              <span className="text-xs font-medium text-slate-500 uppercase tracking-wider">
+                {apiStatus === "online" ? "System Online" : 
+                 apiStatus === "offline" ? "System Offline" : "Connecting..."}
+              </span>
+            </div>
+            {originalImage && (
+              <button 
+                onClick={reset}
+                className="flex items-center gap-2 text-sm font-medium text-slate-500 hover:text-slate-800 transition-colors"
+              >
+                <RefreshCw size={16} />
+                Start Over
+              </button>
+            )}
+          </div>
         </div>
       </header>
 

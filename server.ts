@@ -15,10 +15,15 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // Use os.tmpdir() for uploads on Netlify or Cloud Run, otherwise use local uploads/
-const isCloud = process.env.NETLIFY || process.env.K_SERVICE || process.env.GAE_SERVICE;
+const isCloud = process.env.NETLIFY || process.env.K_SERVICE || process.env.GAE_SERVICE || process.env.LAMBDA_TASK_ROOT || process.env.NODE_ENV === "production";
 const UPLOADS_DIR = isCloud ? path.join(os.tmpdir(), "uploads") : path.join(__dirname, "uploads");
 
-console.log("Uploads directory:", UPLOADS_DIR);
+console.log("Environment:", { 
+  isCloud, 
+  NETLIFY: process.env.NETLIFY, 
+  NODE_ENV: process.env.NODE_ENV,
+  UPLOADS_DIR 
+});
 
 if (!fs.existsSync(UPLOADS_DIR)) {
   fs.mkdirSync(UPLOADS_DIR, { recursive: true });
@@ -31,21 +36,42 @@ async function createServer() {
   const PORT = 3000;
 
   app.use(express.json({ limit: "50mb" }));
+  app.use(express.urlencoded({ extended: true, limit: "50mb" }));
+
+  // Health check
+  app.get("/api/health", (req, res) => {
+    res.json({ 
+      status: "ok", 
+      time: new Date().toISOString(),
+      env: process.env.NODE_ENV,
+      isNetlify: !!process.env.NETLIFY
+    });
+  });
 
   // API Routes
   app.post("/api/upload", (req, res, next) => {
+    console.log("Incoming upload request...");
     upload.single("image")(req, res, (err) => {
       if (err) {
-        console.error("Multer error:", err);
-        return res.status(500).json({ error: "File upload failed", details: err.message });
+        console.error("Multer error during upload:", err);
+        return res.status(500).json({ 
+          error: "File upload failed", 
+          details: err.message,
+          code: err.code 
+        });
       }
-      console.log("POST /api/upload");
+      
       if (!req.file) {
-        console.error("No file in request");
+        console.error("No file received in request. Body:", req.body);
         return res.status(400).json({ error: "No file uploaded" });
       }
-      console.log("File uploaded:", req.file.filename);
-      res.json({ filename: req.file.filename, path: req.file.path });
+      
+      console.log("File successfully uploaded to:", req.file.path);
+      res.json({ 
+        filename: req.file.filename, 
+        path: req.file.path,
+        size: req.file.size
+      });
     });
   });
 
@@ -88,8 +114,17 @@ async function createServer() {
       console.log(`Saved background-removed image: ${outputFilename}`);
       res.json({ filename: outputFilename });
     } catch (error: any) {
-      console.error("Remove BG Error:", error.response?.data?.toString() || error.message);
-      res.status(500).json({ error: "Failed to remove background" });
+      const errorMsg = error.response?.data?.toString() || error.message;
+      console.error("Remove BG Error:", errorMsg);
+      
+      let userFriendlyError = "Failed to remove background.";
+      if (error.response?.status === 403 || error.response?.status === 401) {
+        userFriendlyError = "Background removal API key is invalid or exhausted. Please check your REMOVE_BG_API_KEY environment variable.";
+      } else if (error.response?.status === 429) {
+        userFriendlyError = "Background removal rate limit exceeded. Please try again later.";
+      }
+      
+      res.status(500).json({ error: userFriendlyError, details: errorMsg });
     }
   });
 

@@ -4,6 +4,16 @@ const api = axios.create({
   baseURL: "/",
 });
 
+export const checkHealth = async () => {
+  try {
+    const response = await api.get("/api/health");
+    return response.data;
+  } catch (error) {
+    console.error("Health check failed:", error);
+    throw error;
+  }
+};
+
 export const uploadImage = async (file: File) => {
   const formData = new FormData();
   formData.append("image", file);
@@ -53,12 +63,20 @@ export const downloadPdf = async (filename: string) => {
 };
 
 export const downloadPng = async (filename: string) => {
-  const response = await api.get(`/uploads/${filename}`, { responseType: "blob" });
-  const url = window.URL.createObjectURL(new Blob([response.data]));
-  const link = document.createElement("a");
-  link.href = url;
-  link.setAttribute("download", "passport-photo-layout.png");
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
+  try {
+    const response = await api.get(`/uploads/${filename}`, { responseType: "blob" });
+    const url = window.URL.createObjectURL(new Blob([response.data]));
+    const link = document.createElement("a");
+    link.href = url;
+    link.setAttribute("download", "passport-photo-layout.png");
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+  } catch (error: any) {
+    console.error("Download PNG failed:", error);
+    if (error.response?.status === 404) {
+      throw new Error("The processed image was not found on the server. This can happen in serverless environments like Netlify if the function instance was recycled.");
+    }
+    throw error;
+  }
 };
