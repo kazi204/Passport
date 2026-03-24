@@ -26,16 +26,24 @@ export default function App() {
   const handleUpload = async (file: File) => {
     setIsUploading(true);
     setError(null);
+    console.log("Starting upload for file:", file.name);
     try {
       const data = await uploadImage(file);
+      console.log("Upload successful, server returned:", data);
+      if (!data.filename) {
+        throw new Error("Server did not return a filename");
+      }
       setFilename(data.filename);
       setOriginalImage(URL.createObjectURL(file));
       
       // Automatically remove background
       setIsRemovingBg(true);
+      console.log("Starting background removal for:", data.filename);
       const bgData = await removeBackground(data.filename);
+      console.log("Background removal successful, server returned:", bgData);
       setNoBgFilename(bgData.filename);
     } catch (err: any) {
+      console.error("Upload/Process error:", err);
       setError("Failed to upload or process image. Please try again.");
     } finally {
       setIsUploading(false);
@@ -45,11 +53,13 @@ export default function App() {
 
   const handleGenerate = async () => {
     const activeFilename = noBgFilename || filename;
+    console.log("Generating layout. State:", { noBgFilename, filename, activeFilename });
+    
     if (!activeFilename) {
       if (isRemovingBg || isUploading) {
         setError("Image is still processing. Please wait a moment.");
       } else {
-        setError("Please upload an image first.");
+        setError("Please upload an image first. (Debug: filename=" + filename + ", noBg=" + noBgFilename + ")");
       }
       return;
     }

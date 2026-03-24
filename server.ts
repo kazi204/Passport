@@ -14,8 +14,11 @@ import os from "os";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Use os.tmpdir() for uploads on Netlify, otherwise use local uploads/
-const UPLOADS_DIR = process.env.NETLIFY ? path.join(os.tmpdir(), "uploads") : path.join(__dirname, "uploads");
+// Use os.tmpdir() for uploads on Netlify or Cloud Run, otherwise use local uploads/
+const isCloud = process.env.NETLIFY || process.env.K_SERVICE || process.env.GAE_SERVICE;
+const UPLOADS_DIR = isCloud ? path.join(os.tmpdir(), "uploads") : path.join(__dirname, "uploads");
+
+console.log("Uploads directory:", UPLOADS_DIR);
 
 if (!fs.existsSync(UPLOADS_DIR)) {
   fs.mkdirSync(UPLOADS_DIR, { recursive: true });
@@ -30,16 +33,29 @@ async function createServer() {
   app.use(express.json({ limit: "50mb" }));
 
   // API Routes
-  app.post("/api/upload", upload.single("image"), (req, res) => {
-    if (!req.file) return res.status(400).json({ error: "No file uploaded" });
-    res.json({ filename: req.file.filename, path: req.file.path });
+  app.post("/api/upload", (req, res, next) => {
+    upload.single("image")(req, res, (err) => {
+      if (err) {
+        console.error("Multer error:", err);
+        return res.status(500).json({ error: "File upload failed", details: err.message });
+      }
+      console.log("POST /api/upload");
+      if (!req.file) {
+        console.error("No file in request");
+        return res.status(400).json({ error: "No file uploaded" });
+      }
+      console.log("File uploaded:", req.file.filename);
+      res.json({ filename: req.file.filename, path: req.file.path });
+    });
   });
 
   app.post("/api/remove-bg", async (req, res) => {
     const { filename } = req.body;
+    console.log("POST /api/remove-bg", filename);
     const filePath = path.join(UPLOADS_DIR, filename);
 
     if (!fs.existsSync(filePath)) {
+      console.error("File not found for remove-bg:", filePath);
       return res.status(404).json({ error: "File not found" });
     }
 
@@ -79,9 +95,11 @@ async function createServer() {
 
   app.post("/api/generate-single", async (req, res) => {
     const { filename, bgColor, size, customWidth, customHeight } = req.body;
+    console.log("POST /api/generate-single", { filename, bgColor, size });
     const filePath = path.join(UPLOADS_DIR, filename);
 
     if (!fs.existsSync(filePath)) {
+      console.error("File not found for generate-single:", filePath);
       return res.status(404).json({ error: "File not found" });
     }
 
@@ -131,9 +149,11 @@ async function createServer() {
 
   app.post("/api/generate-layout", async (req, res) => {
     const { filename, bgColor, size, copies, customWidth, customHeight } = req.body;
+    console.log("POST /api/generate-layout", { filename, bgColor, size, copies });
     const filePath = path.join(UPLOADS_DIR, filename);
 
     if (!fs.existsSync(filePath)) {
+      console.error("File not found for generate-layout:", filePath);
       return res.status(404).json({ error: "File not found" });
     }
 
